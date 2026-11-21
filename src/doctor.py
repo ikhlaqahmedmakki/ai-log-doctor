@@ -4,9 +4,14 @@ import json
 import logging
 import os
 import sys
+import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+
+from src.db import init_db, finding_exists, insert_finding
+from src.discord import send_discord_alert
 
 ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOT_PATH = ROOT / "reports" / "latest_snapshot.txt"
@@ -152,12 +157,34 @@ def print_diagnosis(diagnosis: dict) -> None:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     try:
+        init_db()
         snapshot = read_snapshot(SNAPSHOT_PATH)
         load_env(ENV_PATH)
         api_key = require_setting("LLM_API_KEY")
         api_base_url = require_setting("API_BASE_URL")
         content = request_diagnosis(snapshot, api_key, api_base_url)
-        print_diagnosis(parse_diagnosis(content))
+        diagnosis = parse_diagnosis(content)
+        
+        # Generate unique fingerprint from snapshot lines
+        fingerprint = hashlib.sha256(snapshot.encode("utf-8")).hexdigest()
+        
+        if finding_exists(fingerprint):
+            print("Duplicate error ignored")
+        else:
+            timestamp = datetime.now(timezone.utc).isoformat()
+            severity = diagnosis["severity"]
+            summary = diagnosis["summary"]
+            insert_finding(
+                timestamp=timestamp,
+                fingerprint=fingerprint,
+                severity=severity,
+                summary=summary
+            )
+            print_diagnosis(diagnosis)
+
+            if severity.lower() in ("high", "critical"):
+                alert_msg = f"🚨 **AI Log Doctor Alert** [Severity: {severity}]\nSummary: {summary}"
+                send_discord_alert(alert_msg)
     except DoctorError as exc:
         logger.error("%s", exc)
         sys.exit(1)
