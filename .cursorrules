@@ -1,0 +1,41 @@
+# AI Log Doctor
+
+## Stack
+
+- Python for application code in `src/`
+- Bash for operational scripts in `scripts/`
+- SQLite for local storage
+- REST APIs for external services
+- Generated output belongs in `reports/`
+
+## Clean code
+
+- Keep functions small and names specific
+- Prefer the standard library before adding a dependency
+- Match the style of the file you are editing
+- Do not leave dead code or commented-out blocks behind
+
+## Secrets
+
+Load secrets from a `.env` file or the process environment. Never hardcode API keys, tokens, or passwords in source, scripts, logs, or commits.
+
+```python
+# Bad
+API_KEY = "sk-live-..."
+
+# Good
+API_KEY = os.environ["API_KEY"]
+```
+
+## Errors
+
+Handle errors gracefully. Catch specific exceptions, log what failed and why, and surface a clear error to the caller. Do not use empty `except` blocks.
+
+```python
+try:
+    response = client.get(url, timeout=10)
+    response.raise_for_status()
+except requests.RequestException as exc:
+    logger.exception("REST request failed: %s", url)
+    raise
+```
